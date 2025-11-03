@@ -2,9 +2,9 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use flate2::read::ZlibDecoder;
 use std::ffi::CStr;
+use std::fs;
 use std::io::prelude::*;
 use std::io::*;
-use std::{any, fs};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -30,7 +30,7 @@ enum Kind {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    println!("Logs from your program will appear here!");
+    eprintln!("Logs from your program will appear here!");
 
     match args.command {
         Command::Init => {
@@ -44,6 +44,8 @@ fn main() -> anyhow::Result<()> {
             pretty_print,
             object_hash,
         } => {
+            anyhow::ensure!(pretty_print, "-p must be given");
+
             let mut f = std::fs::File::open(format!(
                 ".git/objects/{}/{}",
                 &object_hash[..2],
@@ -70,35 +72,30 @@ fn main() -> anyhow::Result<()> {
                 );
             };
 
+            let Some(size) = header.strip_prefix("blob ") else {
+                anyhow::bail!(".git/objects file header did not start with 'blob ': '{header}'");
+            };
+
             let kind = match kind {
                 "blob" => Kind::Blob,
                 _ => anyhow::bail!("Unknown kind: '{kind}'"),
             };
-
-            let Some(size) = header.strip_prefix("blob ") else {
-                anyhow::bail!(".git/objects file header did not start with 'blob ': '{header}'");
-            };
             let size = size
-                .parse::<usize>()
+                .parse::<u64>()
                 .context(".git/objects file header has invalid size: {size}")?;
-
-            buf.clear();
-            buf.resize(size, 0);
-
-            z.read_exact(&mut buf[..])
-                .context(".read true contents of .git/objects")?;
-            let n = z
-                .read(&mut [0])
-                .context("validate EOF in .git/objects file")?;
-            anyhow::ensure!(n == 0, ".git/objects file had {n} trailing bytes");
-
-            let stdout = std::io::stdout();
-            let mut stdout = stdout.lock();
+            let mut z = z.take(size);
 
             match kind {
-                Kind::Blob => stdout
-                    .write_all(&buf)
-                    .context("wrte object contents to stdout")?,
+                Kind::Blob => {
+                    let stdout = std::io::stdout();
+                    let mut stdout = stdout.lock();
+                    let n = std::io::copy(&mut z, &mut stdout)
+                        .context("write .git/objects file has {n} trailing bytes")?;
+                    anyhow::ensure!(
+                        n == size,
+                        ".git/objects file was not the expected size (expected: {size}, actual: {n})"
+                    );
+                }
             }
         }
     }
