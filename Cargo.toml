@@ -1,0 +1,14 @@
+[package]
+name = "mygit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.0.32", features = ["derive"] }
+flate2 = "1.0"
+sha1 = "0.10.1"
+hex = "0.4.3"
+anyhow = "1.0.59"
+
+[profile.dev]
+incremental = true
