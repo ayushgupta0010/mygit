@@ -7,7 +7,7 @@ use anyhow::Context;
 
 use crate::objects::{Kind, Object};
 
-pub(crate) fn invoke(name_only: bool, tree_hash: String) -> anyhow::Result<()> {
+pub(crate) fn invoke(name_only: bool, tree_hash: &str) -> anyhow::Result<()> {
     let mut object = Object::read(&tree_hash).context("parse out tree object file")?;
     match object.kind {
         Kind::Tree => {
